@@ -1,0 +1,392 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --blue: #2563EB;
+  --blue-deep: #1741C4;
+  --green: #00C896;
+  --green-soft: #EAFBF5;
+  --ink: #0B1220;
+  --slate: #5B6472;
+  --slate-light: #8A93A3;
+  --line: #E6EAF2;
+  --bg-tint: #F5F8FF;
+  --white: #FFFFFF;
+  --pink: #FF4D8D;
+  --pink-soft: #FFF1F5;
+  --amber: #F5A524;
+  --amber-soft: #FFF8E8;
+  --radius-lg: 28px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--ink);
+  background: var(--white);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+ul {
+  list-style: none;
+}
+
+.mono {
+  font-family: var(--font-jetbrains), monospace;
+}
+
+.wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+@media (max-width: 640px) {
+  .wrap {
+    padding: 0 20px;
+  }
+}
+
+section {
+  position: relative;
+}
+
+/* Base button styles matching live autofocuss.com/ai */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 100px;
+  font-weight: 700;
+  font-size: 14.5px;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: var(--blue);
+  color: #fff;
+  box-shadow: 0 8px 20px -8px rgba(37, 99, 235, 0.6);
+}
+
+.btn-primary:hover {
+  background: var(--blue-deep);
+  transform: translateY(-1px);
+}
+
+.btn-outline {
+  background: transparent;
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.btn-outline:hover {
+  background: var(--ink);
+  color: #fff;
+}
+
+.btn-lg {
+  padding: 16px 32px;
+  font-size: 16px;
+}
+
+.price-was {
+  text-decoration: line-through;
+  font-weight: 600;
+  opacity: 0.6;
+  margin-right: 7px;
+}
+
+.price-now {
+  font-weight: 800;
+}
+
+/* Badge component */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--slate);
+  background: var(--white);
+  margin-bottom: 28px;
+}
+
+.badge .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+/* Section Header structure */
+.sec-pad {
+  padding: 96px 0;
+}
+
+@media (max-width: 640px) {
+  .sec-pad {
+    padding: 64px 0;
+  }
+}
+
+.sec-head {
+  max-width: 640px;
+  margin: 0 auto 56px;
+  text-align: center;
+}
+
+.eyebrow {
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  color: var(--blue);
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  display: block;
+}
+
+h1.headline {
+  font-size: 56px;
+  line-height: 1.04;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  margin-bottom: 22px;
+}
+
+h1.headline .accent {
+  background: linear-gradient(92deg, var(--blue) 0%, var(--green) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+h2 {
+  font-size: 38px;
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 980px) {
+  h1.headline {
+    font-size: 40px;
+  }
+}
+
+@media (max-width: 640px) {
+  h1.headline {
+    font-size: 32px;
+  }
+  h2 {
+    font-size: 28px;
+  }
+}
+
+.sub {
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--slate);
+  max-width: 540px;
+  margin-bottom: 34px;
+}
+
+/* Card grids */
+.card-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.card-grid-6 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+}
+
+.steps-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 980px) {
+  .card-grid-3,
+  .card-grid-6,
+  .steps-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .card-grid-3,
+  .card-grid-6,
+  .steps-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Flow card animation */
+@keyframes floaty {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-float-1 {
+  animation: floaty 5s ease-in-out infinite;
+}
+
+.animate-float-2 {
+  animation: floaty 5s ease-in-out infinite 0.4s;
+}
+
+.animate-float-3 {
+  animation: floaty 5s ease-in-out infinite 0.8s;
+}
+
+.animate-float-4 {
+  animation: floaty 5s ease-in-out infinite 1.2s;
+}
+
+/* Flow panel styling */
+.flow-panel {
+  position: relative;
+  height: 460px;
+}
+
+.flow-card {
+  position: absolute;
+  left: 0;
+  right: 0;
+  margin: auto;
+  width: 88%;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  box-shadow: 0 20px 45px -18px rgba(15, 23, 42, 0.18);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.flow-card .ic {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+.flow-card .txt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.flow-card .txt b {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.flow-card .txt span {
+  font-size: 11.5px;
+  color: var(--slate-light);
+  font-weight: 500;
+}
+
+.fc1 {
+  top: 0;
+  z-index: 4;
+}
+.fc1 .ic {
+  background: #FFF1F5;
+  color: var(--pink);
+}
+
+.fc2 {
+  top: 118px;
+  left: 34px;
+  z-index: 3;
+}
+.fc2 .ic {
+  background: #EFF4FF;
+  color: var(--blue);
+}
+
+.fc3 {
+  top: 236px;
+  z-index: 2;
+}
+.fc3 .ic {
+  background: #EAFBF5;
+  color: var(--green);
+}
+
+.fc4 {
+  top: 354px;
+  left: 34px;
+  z-index: 1;
+}
+.fc4 .ic {
+  background: #FFF8E8;
+  color: var(--amber);
+}
+
+.flow-line {
+  position: absolute;
+  left: 50%;
+  top: 36px;
+  bottom: 36px;
+  width: 2px;
+  z-index: 0;
+  background: repeating-linear-gradient(180deg, var(--line) 0 6px, transparent 6px 12px);
+}
+
+.step-num {
+  font-family: var(--font-jetbrains), monospace;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--blue);
+  background: var(--bg-tint);
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
