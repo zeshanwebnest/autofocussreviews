@@ -9,11 +9,10 @@ import { validateIndianPhone, validateCustomerName } from '@/lib/validations';
 
 interface CustomerFeedbackFlowProps {
   client: Client;
-  isDemo?: boolean;
   onSuccess?: () => void;
 }
 
-export function CustomerFeedbackFlow({ client, isDemo = false, onSuccess }: CustomerFeedbackFlowProps) {
+export function CustomerFeedbackFlow({ client, onSuccess }: CustomerFeedbackFlowProps) {
   const [rating, setRating] = useState<number>(0);
   const [name, setName] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
@@ -59,19 +58,6 @@ export function CustomerFeedbackFlow({ client, isDemo = false, onSuccess }: Cust
     setIsSubmitting(true);
 
     try {
-      if (isDemo) {
-        // Fast isolated demo submission (simulate 400ms network latency)
-        await new Promise((resolve) => setTimeout(resolve, 400));
-        if (rating >= 4) {
-          setSubmittedState('happy');
-        } else {
-          setSubmittedState('recovery');
-        }
-        setIsSubmitting(false);
-        if (onSuccess) onSuccess();
-        return;
-      }
-
       const res = await fetch('/api/feedback/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

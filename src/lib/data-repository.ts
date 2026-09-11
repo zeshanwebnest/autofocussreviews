@@ -8,7 +8,7 @@ let localClients: Client[] = [
     business_name: 'Tambi Filter Coffee',
     logo_url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=120&auto=format&fit=crop&q=80',
     brand_colour: '#B45309', // Warm South Indian filter coffee amber/brown
-    google_review_url: 'https://search.google.com/local/writereview?placeid=ChIJN1t_tDeuEmsRUsoyG83frY4',
+    google_review_url: 'https://g.page/r/CS7_SFlSItxZEBM/review',
     owner_whatsapp: '+919820012345',
     owner_email: 'owner@tambicafe.in',
     alert_threshold: 3,
@@ -22,7 +22,7 @@ let localClients: Client[] = [
     business_name: 'Demo Café & Kitchen',
     logo_url: null,
     brand_colour: '#2563EB',
-    google_review_url: 'https://search.google.com/local/writereview?placeid=demo',
+    google_review_url: 'https://g.page/r/CS7_SFlSItxZEBM/review',
     owner_whatsapp: '+919999999999',
     owner_email: 'demo@autofocuss.com',
     alert_threshold: 3,

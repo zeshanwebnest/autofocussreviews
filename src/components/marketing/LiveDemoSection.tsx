@@ -4,12 +4,13 @@ import React from 'react';
 import { CustomerFeedbackFlow } from '@/components/feedback/CustomerFeedbackFlow';
 import { Client } from '@/types/app.types';
 
-const demoClient: Client = {
+// Only used if the 'demo' business cannot be read from the database.
+const fallbackDemoClient: Client = {
   id: 'demo',
   business_name: 'Demo Café & Kitchen',
   logo_url: null,
   brand_colour: '#2563EB',
-  google_review_url: 'https://search.google.com/local/writereview?placeid=demo',
+  google_review_url: 'https://g.page/r/CS7_SFlSItxZEBM/review',
   owner_whatsapp: '+919999999999',
   owner_email: 'demo@autofocuss.com',
   alert_threshold: 3,
@@ -19,7 +20,14 @@ const demoClient: Client = {
   created_at: new Date().toISOString(),
 };
 
-export function LiveDemoSection() {
+interface LiveDemoSectionProps {
+  /** The 'demo' business, loaded from the database by the page. */
+  demoClient?: Client | null;
+}
+
+export function LiveDemoSection({ demoClient }: LiveDemoSectionProps) {
+  const client = demoClient ?? fallbackDemoClient;
+
   return (
     <section id="demo" className="sec-pad bg-[#F5F8FF] rounded-[40px] my-10">
       <div className="wrap">
@@ -34,14 +42,15 @@ export function LiveDemoSection() {
         <div className="max-w-md mx-auto bg-white border border-[#E6EAF2] rounded-3xl p-6 sm:p-8 shadow-card">
           <div className="mb-4 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EAFBF5] text-[#00C896] text-[11px] font-bold">
             <span className="w-2 h-2 rounded-full bg-[#00C896]" />
-            LIVE SANDBOX DEMO (ISOLATED)
+            LIVE DEMO
           </div>
 
-          <CustomerFeedbackFlow client={demoClient} isDemo={true} />
+          <CustomerFeedbackFlow client={client} />
         </div>
 
         <p className="text-center text-xs text-[#8A93A3] mt-6 font-medium">
-          Note: This live demo runs safely in a sandbox environment and will not trigger real webhooks or pollute live client data.
+          Note: This demo is connected to the live system. Ratings submitted here are saved against the
+          &ldquo;{client.business_name}&rdquo; demo business, so you can watch them appear in the dashboard.
         </p>
       </div>
     </section>
