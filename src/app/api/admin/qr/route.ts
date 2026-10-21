@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateQrSvg, generateQrBuffer } from '@/lib/qr';
 import { DataRepository } from '@/lib/data-repository';
+import { guardShop } from '@/lib/auth';
+
+/**
+ * The public base URL that printed QR codes point at.
+ *
+ * NEXT_PUBLIC_APP_URL wins when set, because a QR code is permanent once it is
+ * printed: generating one while visiting a preview deployment or the raw
+ * .vercel.app address would bake that hostname into every sticker. The request
+ * host remains the fallback so existing behaviour is unchanged if the variable
+ * is missing.
+ */
+function resolveBaseUrl(req: NextRequest): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, '');
+
+  const host = req.headers.get('host') || 'localhost:3000';
+  const protocol = host.startsWith('localhost') ? 'http' : 'https';
+  return `${protocol}://${host}`;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,15 +32,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Client ID is required.' }, { status: 400 });
     }
 
+    // A shop owner can only ever download their own shop's QR code.
+    const guard = await guardShop(clientId);
+    if (!guard.ok) return guard.response;
+
     const client = await DataRepository.getClientById(clientId);
     if (!client) {
       return NextResponse.json({ success: false, error: 'Client not found.' }, { status: 404 });
     }
 
-    // Target feedback URL
-    const host = req.headers.get('host') || 'localhost:3000';
-    const protocol = host.startsWith('localhost') ? 'http' : 'https';
-    const targetUrl = `${protocol}://${host}/f/${client.id}`;
+    const targetUrl = `${resolveBaseUrl(req)}/f/${client.id}`;
 
     if (format === 'svg') {
       const svg = await generateQrSvg(targetUrl, { width: Math.min(size, 800) });

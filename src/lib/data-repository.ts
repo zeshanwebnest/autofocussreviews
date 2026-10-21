@@ -1,106 +1,58 @@
 import { Client, Submission } from '@/types/app.types';
 import { createAdminClient } from '@/lib/supabase/admin';
 
-// Fallback seed database for local development and test runs
-let localClients: Client[] = [
-  {
-    id: 'tambi',
-    business_name: 'Tambi Filter Coffee',
-    logo_url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=120&auto=format&fit=crop&q=80',
-    brand_colour: '#B45309', // Warm South Indian filter coffee amber/brown
-    google_review_url: 'https://g.page/r/CS7_SFlSItxZEBM/review',
-    owner_whatsapp: '+919820012345',
-    owner_email: 'owner@tambicafe.in',
-    alert_threshold: 3,
-    webhook_url: 'https://hook.eu2.make.com/demo-tambi-webhook',
-    status: 'active',
-    location_id: 'vasai-west',
-    created_at: new Date(Date.now() - 30 * 86400000).toISOString(),
-  },
-  {
-    id: 'demo',
-    business_name: 'Demo Café & Kitchen',
-    logo_url: null,
-    brand_colour: '#2563EB',
-    google_review_url: 'https://g.page/r/CS7_SFlSItxZEBM/review',
-    owner_whatsapp: '+919999999999',
-    owner_email: 'demo@autofocuss.com',
-    alert_threshold: 3,
-    webhook_url: null,
-    status: 'active',
-    location_id: null,
-    created_at: new Date(Date.now() - 10 * 86400000).toISOString(),
-  },
-];
+/**
+ * Every read and write goes to Supabase.
+ *
+ * This repository deliberately has NO in-memory fallback. An earlier version
+ * swallowed database errors and returned hard-coded sample records instead,
+ * which made failures invisible: the feedback form reported success while the
+ * submission was dropped. Now that shop owners have their own dashboards it
+ * would be worse than invisible — a transient error could serve one shop the
+ * sample data belonging to another. Failing loudly is the only safe behaviour.
+ */
+function admin() {
+  const supabase = createAdminClient();
+  if (!supabase) {
+    throw new Error(
+      'Supabase is not configured. Both NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.'
+    );
+  }
+  return supabase;
+}
 
-let localSubmissions: Submission[] = [
-  {
-    id: 'sub-tambi-001',
-    client_id: 'tambi',
-    name: 'Rohan Sharma',
-    phone: '9820198201',
-    rating: 5,
-    comment: 'Authentic degree filter coffee and piping hot medu vada! Best spot in Vasai.',
-    source: 'qr',
-    created_at: new Date(Date.now() - 2 * 3600000).toISOString(),
-  },
-  {
-    id: 'sub-tambi-002',
-    client_id: 'tambi',
-    name: 'Priya Patil',
-    phone: '9769123456',
-    rating: 5,
-    comment: 'Quick service and lovely atmosphere for morning breakfast.',
-    source: 'qr',
-    created_at: new Date(Date.now() - 24 * 3600000).toISOString(),
-  },
-  {
-    id: 'sub-tambi-003',
-    client_id: 'tambi',
-    name: 'Amit Sawant',
-    phone: '9167890123',
-    rating: 2,
-    comment: 'Waiting time for the table was almost 25 minutes on Sunday morning.',
-    source: 'qr',
-    created_at: new Date(Date.now() - 72 * 3600000).toISOString(),
-  },
-];
+function fail(operation: string, error: { message: string }): never {
+  throw new Error(`[DataRepository] ${operation} failed: ${error.message}`);
+}
 
 export const DataRepository = {
+  /** Returns null when the shop genuinely does not exist; throws on any error. */
   async getClientById(id: string): Promise<Client | null> {
-    const supabase = createAdminClient();
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('id', id.toLowerCase())
-        .single();
-      if (!error && data) {
-        return data as Client;
-      }
-    }
-    const client = localClients.find((c) => c.id.toLowerCase() === id.toLowerCase());
-    return client || null;
+    const { data, error } = await admin()
+      .from('clients')
+      .select('*')
+      .eq('id', id.toLowerCase())
+      .maybeSingle();
+
+    if (error) fail(`getClientById(${id})`, error);
+    return (data ?? null) as Client | null;
   },
 
   async getAllClients(): Promise<Client[]> {
-    const supabase = createAdminClient();
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data) {
-        return data as Client[];
-      }
-    }
-    return [...localClients];
+    const { data, error } = await admin()
+      .from('clients')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) fail('getAllClients', error);
+    return (data ?? []) as Client[];
   },
 
-  async upsertClient(client: Partial<Client> & { id: string; business_name: string; google_review_url: string }): Promise<Client> {
-    const supabase = createAdminClient();
+  async upsertClient(
+    client: Partial<Client> & { id: string; business_name: string; google_review_url: string }
+  ): Promise<Client> {
     const cleanId = client.id.toLowerCase().trim().replace(/[^a-z0-9-_]/g, '-');
-    
+
     const clientRecord: Client = {
       id: cleanId,
       business_name: client.business_name.trim(),
@@ -116,34 +68,18 @@ export const DataRepository = {
       created_at: client.created_at || new Date().toISOString(),
     };
 
-    if (supabase) {
-      const { data, error } = await (supabase.from('clients') as any)
-        .upsert(clientRecord)
-        .select()
-        .single();
-      if (!error && data) {
-        return data as Client;
-      }
-    }
+    const { data, error } = await (admin().from('clients') as any)
+      .upsert(clientRecord)
+      .select()
+      .single();
 
-    const idx = localClients.findIndex((c) => c.id === cleanId);
-    if (idx >= 0) {
-      localClients[idx] = clientRecord;
-    } else {
-      localClients.unshift(clientRecord);
-    }
-    return clientRecord;
+    if (error) fail(`upsertClient(${cleanId})`, error);
+    return data as Client;
   },
 
   async deleteClient(id: string): Promise<boolean> {
-    const cleanId = id.toLowerCase();
-    const supabase = createAdminClient();
-    if (supabase) {
-      const { error } = await supabase.from('clients').delete().eq('id', cleanId);
-      if (!error) return true;
-    }
-    localClients = localClients.filter((c) => c.id !== cleanId);
-    localSubmissions = localSubmissions.filter((s) => s.client_id !== cleanId);
+    const { error } = await admin().from('clients').delete().eq('id', id.toLowerCase());
+    if (error) fail(`deleteClient(${id})`, error);
     return true;
   },
 
@@ -155,83 +91,63 @@ export const DataRepository = {
     comment?: string | null;
     source?: string;
   }): Promise<Submission> {
-    const supabase = createAdminClient();
-    const submissionRecord: Submission = {
-      id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      client_id: data.client_id.toLowerCase(),
-      name: data.name.trim(),
-      phone: data.phone.trim(),
-      rating: data.rating,
-      comment: data.comment ? data.comment.trim() : null,
-      source: data.source || 'qr',
-      created_at: new Date().toISOString(),
-    };
+    const { data: inserted, error } = await (admin().from('submissions') as any)
+      .insert({
+        client_id: data.client_id.toLowerCase(),
+        name: data.name.trim(),
+        phone: data.phone.trim(),
+        rating: data.rating,
+        comment: data.comment ? data.comment.trim() : null,
+        source: data.source || 'qr',
+      })
+      .select()
+      .single();
 
-    if (supabase) {
-      const { data: inserted, error } = await (supabase.from('submissions') as any)
-        .insert({
-          client_id: submissionRecord.client_id,
-          name: submissionRecord.name,
-          phone: submissionRecord.phone,
-          rating: submissionRecord.rating,
-          comment: submissionRecord.comment,
-          source: submissionRecord.source,
-        })
-        .select()
-        .single();
-      if (!error && inserted) {
-        return inserted as Submission;
-      }
-    }
-
-    localSubmissions.unshift(submissionRecord);
-    return submissionRecord;
+    if (error) fail('insertSubmission', error);
+    return inserted as Submission;
   },
 
   async getSubmissionsByClientId(clientId: string): Promise<Submission[]> {
-    const cleanId = clientId.toLowerCase();
-    const supabase = createAdminClient();
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('submissions')
-        .select('*')
-        .eq('client_id', cleanId)
-        .order('created_at', { ascending: false });
-      if (!error && data) {
-        return data as Submission[];
-      }
-    }
-    return localSubmissions.filter((s) => s.client_id === cleanId);
+    const { data, error } = await admin()
+      .from('submissions')
+      .select('*')
+      .eq('client_id', clientId.toLowerCase())
+      .order('created_at', { ascending: false });
+
+    if (error) fail(`getSubmissionsByClientId(${clientId})`, error);
+    return (data ?? []) as Submission[];
   },
 
   async getAllSubmissions(): Promise<Submission[]> {
-    const supabase = createAdminClient();
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('submissions')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data) {
-        return data as Submission[];
-      }
-    }
-    return [...localSubmissions];
+    const { data, error } = await admin()
+      .from('submissions')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) fail('getAllSubmissions', error);
+    return (data ?? []) as Submission[];
   },
 
   async getClientStats(clientId: string) {
     const submissions = await this.getSubmissionsByClientId(clientId);
-    const count = submissions.length;
-    if (count === 0) {
-      return { count: 0, averageRating: 0, happyCount: 0, alertCount: 0 };
-    }
-    const sum = submissions.reduce((acc, curr) => acc + curr.rating, 0);
-    const happyCount = submissions.filter((s) => s.rating >= 4).length;
-    const alertCount = submissions.filter((s) => s.rating <= 3).length;
-    return {
-      count,
-      averageRating: parseFloat((sum / count).toFixed(1)),
-      happyCount,
-      alertCount,
-    };
+    return computeStats(submissions);
   },
 };
+
+/**
+ * Shared so the central admin, the shop filter and the owner dashboard all
+ * report identical numbers from the same rows.
+ */
+export function computeStats(submissions: Submission[]) {
+  const count = submissions.length;
+  if (count === 0) {
+    return { count: 0, averageRating: 0, happyCount: 0, alertCount: 0 };
+  }
+  const sum = submissions.reduce((acc, curr) => acc + curr.rating, 0);
+  return {
+    count,
+    averageRating: parseFloat((sum / count).toFixed(1)),
+    happyCount: submissions.filter((s) => s.rating >= 4).length,
+    alertCount: submissions.filter((s) => s.rating <= 3).length,
+  };
+}

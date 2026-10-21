@@ -1,20 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DataRepository } from '@/lib/data-repository';
+import { guardUser, resolveScope } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   try {
+    const guard = await guardUser();
+    if (!guard.ok) return guard.response;
+
     const { searchParams } = new URL(req.url);
-    const clientId = searchParams.get('clientId');
+    const requested = searchParams.get('clientId');
 
-    let submissions = [];
-    let filename = `customer-phone-list-all-${new Date().toISOString().slice(0, 10)}.csv`;
-
-    if (clientId) {
-      submissions = await DataRepository.getSubmissionsByClientId(clientId);
-      filename = `customer-phone-list-${clientId}-${new Date().toISOString().slice(0, 10)}.csv`;
-    } else {
-      submissions = await DataRepository.getAllSubmissions();
+    // An owner is pinned to their own shop here; an admin may pass any shop,
+    // or none to export everything.
+    const scope = resolveScope(guard.profile, requested);
+    if ('error' in scope) {
+      return NextResponse.json({ success: false, error: scope.error }, { status: 403 });
     }
+
+    const clientId = scope.clientId;
+    const stamp = new Date().toISOString().slice(0, 10);
+
+    const submissions = clientId
+      ? await DataRepository.getSubmissionsByClientId(clientId)
+      : await DataRepository.getAllSubmissions();
+
+    const filename = `customer-phone-list-${clientId ?? 'all'}-${stamp}.csv`;
 
     const headers = ['Submission ID', 'Client ID', 'Customer Name', 'Phone', 'Rating', 'Comment', 'Source', 'Submitted At'];
     const csvRows = [headers.join(',')];

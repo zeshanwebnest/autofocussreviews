@@ -85,6 +85,108 @@ export interface Database {
           created_at?: string
         }
       }
+      profiles: {
+        Row: {
+          id: string
+          email: string | null
+          full_name: string | null
+          role: string
+          client_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          email?: string | null
+          full_name?: string | null
+          role?: string
+          client_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string | null
+          full_name?: string | null
+          role?: string
+          client_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      notification_settings: {
+        Row: {
+          id: string
+          scope: string
+          client_id: string | null
+          recipient_email: string | null
+          cc_emails: string[]
+          enabled: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: string
+          scope: string
+          client_id?: string | null
+          recipient_email?: string | null
+          cc_emails?: string[]
+          enabled?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          scope?: string
+          client_id?: string | null
+          recipient_email?: string | null
+          cc_emails?: string[]
+          enabled?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+      }
+      email_log: {
+        Row: {
+          id: string
+          submission_id: string | null
+          client_id: string | null
+          kind: string
+          recipients: string[]
+          cc: string[]
+          subject: string | null
+          status: string
+          provider_id: string | null
+          error: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          submission_id?: string | null
+          client_id?: string | null
+          kind?: string
+          recipients?: string[]
+          cc?: string[]
+          subject?: string | null
+          status: string
+          provider_id?: string | null
+          error?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          submission_id?: string | null
+          client_id?: string | null
+          kind?: string
+          recipients?: string[]
+          cc?: string[]
+          subject?: string | null
+          status?: string
+          provider_id?: string | null
+          error?: string | null
+          created_at?: string
+        }
+      }
     }
   }
 }

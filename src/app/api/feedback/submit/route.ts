@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { DataRepository } from '@/lib/data-repository';
 import { validateCustomerName, validateIndianPhone, validateRating, sanitizeComment } from '@/lib/validations';
 import { dispatchSubmissionWebhook } from '@/lib/webhook';
+import { dispatchNegativeReviewAlert } from '@/lib/alerts';
 import { WebhookPayload } from '@/types/app.types';
 
 export async function POST(req: NextRequest) {
@@ -13,7 +14,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Client ID is required.' }, { status: 400 });
     }
 
-    // 1. Fetch client config
+    // 1. Fetch client config. The shop a submission belongs to is always
+    //    resolved server-side from this record, never trusted from the body.
     const client = await DataRepository.getClientById(clientId);
     if (!client) {
       return NextResponse.json({ success: false, error: 'Business not found.' }, { status: 404 });
@@ -51,33 +53,52 @@ export async function POST(req: NextRequest) {
       source: source || 'qr',
     });
 
-    // 4. Prepare and dispatch Make.com webhook (asynchronously, non-blocking)
     const isAlert = ratingVal.value <= client.alert_threshold;
-    const webhookPayload: WebhookPayload = {
-      event: 'submission.created',
-      submissionId: submission.id,
-      clientId: client.id,
-      businessName: client.business_name,
-      customer: {
-        name: submission.name,
-        phone: submission.phone,
-      },
-      rating: submission.rating,
-      isAlert,
-      comment: submission.comment,
-      source: submission.source,
-      ownerContact: {
-        whatsapp: client.owner_whatsapp,
-        email: client.owner_email,
-      },
-      googleReviewUrl: client.google_review_url,
-      timestamp: submission.created_at,
-    };
 
-    // Fire webhook asynchronously
+    // 4. Notify the shop. Both of these run through `after()` so the customer
+    //    gets their thank-you screen immediately, while the work still
+    //    completes — a bare floating promise can be cut off when a serverless
+    //    function returns its response.
+    if (isAlert) {
+      after(async () => {
+        const result = await dispatchNegativeReviewAlert(client, submission);
+        if (result.status !== 'sent') {
+          console.warn(
+            `[Submit] alert for ${submission.id} (${client.id}) was ${result.status}: ${result.reason ?? 'no reason given'}`
+          );
+        }
+      });
+    }
+
+    // The Make.com webhook is retained alongside email for shops that use it.
     if (client.webhook_url && client.id !== 'demo') {
-      dispatchSubmissionWebhook(client.webhook_url, webhookPayload).catch((err) => {
-        console.error('[Webhook Dispatch Error]', err);
+      const webhookPayload: WebhookPayload = {
+        event: 'submission.created',
+        submissionId: submission.id,
+        clientId: client.id,
+        businessName: client.business_name,
+        customer: {
+          name: submission.name,
+          phone: submission.phone,
+        },
+        rating: submission.rating,
+        isAlert,
+        comment: submission.comment,
+        source: submission.source,
+        ownerContact: {
+          whatsapp: client.owner_whatsapp,
+          email: client.owner_email,
+        },
+        googleReviewUrl: client.google_review_url,
+        timestamp: submission.created_at,
+      };
+
+      after(async () => {
+        try {
+          await dispatchSubmissionWebhook(client.webhook_url, webhookPayload);
+        } catch (err) {
+          console.error('[Webhook Dispatch Error]', err);
+        }
       });
     }
 
