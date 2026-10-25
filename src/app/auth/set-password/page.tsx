@@ -1,78 +1,176 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { readAuthCallback, type AuthCallback } from '@/lib/auth-callback';
 
 /**
  * Where an invitation or password-reset link lands.
  *
- * Supabase puts a one-time session in the URL; the browser client picks it up,
- * the owner chooses a password, and the link is spent. No password is ever
- * transmitted to our own server or stored anywhere by us.
+ * Supabase puts either a session or an error in the URL fragment. The Supabase
+ * client is still the only thing that validates the session — this page just
+ * reports accurately on what happened and offers a way forward when the link
+ * cannot be used.
  */
+
+/** How long to wait for the client to turn a token fragment into a session. */
+const SESSION_TIMEOUT_MS = 8000;
+
+type Phase =
+  | { name: 'checking' }
+  | { name: 'ready'; email: string | null }
+  | { name: 'unusable'; title: string; detail: string; code?: string }
+  | { name: 'done' };
+
 export default function SetPasswordPage() {
   const router = useRouter();
-  const [checking, setChecking] = useState(true);
-  const [sessionOk, setSessionOk] = useState(false);
-  const [email, setEmail] = useState<string | null>(null);
+  const [phase, setPhase] = useState<Phase>({ name: 'checking' });
+  const settled = useRef(false);
 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // "Request a new link"
+  const [retryEmail, setRetryEmail] = useState('');
+  const [retryBusy, setRetryBusy] = useState(false);
+  const [retryDone, setRetryDone] = useState(false);
+  const [retryMessage, setRetryMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const supabase = createClient();
+    let callback: AuthCallback = { kind: 'none' };
+    try {
+      callback = readAuthCallback(window.location.hash, window.location.search);
+    } catch {
+      callback = { kind: 'none' };
+    }
 
-    // The session may land either immediately or via the auth state change,
-    // depending on how quickly the URL fragment is parsed.
+    const settle = (next: Phase) => {
+      if (settled.current) return;
+      settled.current = true;
+      setPhase(next);
+    };
+
+    if (callback.kind === 'error') {
+      settle({ name: 'unusable', title: callback.title, detail: callback.detail, code: callback.code });
+      return;
+    }
+
+    let supabase: ReturnType<typeof createClient>;
+    try {
+      supabase = createClient();
+    } catch {
+      settle({
+        name: 'unusable',
+        title: 'Something went wrong',
+        detail: 'This page could not start up. Please reload and try again.',
+      });
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      settle(
+        callback.kind === 'tokens'
+          ? {
+              name: 'unusable',
+              title: 'This link could not be verified',
+              detail:
+                'The link looked valid but the sign-in did not complete. This is usually a temporary ' +
+                'connection problem — requesting a new link should fix it.',
+            }
+          : {
+              name: 'unusable',
+              title: 'Nothing to set up here',
+              detail:
+                'Open this page using the link from your email. If you typed the address directly, ' +
+                'request a new link below.',
+            }
+      );
+    }, SESSION_TIMEOUT_MS);
+
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        setSessionOk(true);
-        setEmail(session.user.email ?? null);
-        setChecking(false);
+        clearTimeout(timer);
+        settle({ name: 'ready', email: session.user.email ?? null });
       }
     });
 
-    void supabase.auth.getSession().then(({ data }) => {
-      if (data.session?.user) {
-        setSessionOk(true);
-        setEmail(data.session.user.email ?? null);
-      }
-      setChecking(false);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (data.session?.user) {
+          clearTimeout(timer);
+          settle({ name: 'ready', email: data.session.user.email ?? null });
+        }
+      })
+      .catch(() => {
+        // Leave it to the timeout rather than failing on a transient error.
+      });
 
-    return () => sub.subscription.unsubscribe();
+    return () => {
+      clearTimeout(timer);
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setFormError(null);
 
     if (password.length < 8) {
-      setError('Use at least 8 characters.');
+      setFormError('Use at least 8 characters.');
       return;
     }
     if (password !== confirm) {
-      setError('The two passwords do not match.');
+      setFormError('The two passwords do not match.');
       return;
     }
 
     setBusy(true);
-    const supabase = createClient();
-    const { error: updateError } = await supabase.auth.updateUser({ password });
-    setBusy(false);
-
-    if (updateError) {
-      setError(updateError.message);
-      return;
+    try {
+      const supabase = createClient();
+      // Fails unless the session established above is still valid, so a
+      // password cannot be set without one.
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) {
+        setFormError(error.message);
+        return;
+      }
+      setPhase({ name: 'done' });
+      setTimeout(() => router.replace('/dashboard'), 1200);
+    } catch {
+      setFormError('Could not reach the server. Check your connection and try again.');
+    } finally {
+      setBusy(false);
     }
+  };
 
-    setDone(true);
-    // The server decides where they belong based on their role.
-    setTimeout(() => router.replace('/dashboard'), 1200);
+  const requestNewLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (retryBusy || retryDone) return;
+
+    setRetryBusy(true);
+    setRetryMessage(null);
+    try {
+      const res = await fetch('/api/auth/request-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: retryEmail.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setRetryMessage(data.error || 'Could not request a new link. Please try again.');
+        return;
+      }
+      setRetryDone(true);
+      setRetryMessage(data.message);
+    } catch {
+      setRetryMessage('Could not reach the server. Check your connection and try again.');
+    } finally {
+      setRetryBusy(false);
+    }
   };
 
   return (
@@ -82,26 +180,82 @@ export default function SetPasswordPage() {
           <span className="text-2xl font-black tracking-tight text-[#0B1220]">
             D<span className="text-[#00C896]">(AI)</span>Y
           </span>
-          <p className="text-xs font-bold text-[#8A93A3] uppercase tracking-wider mt-1">Choose your password</p>
+          <p className="text-xs font-bold text-[#8A93A3] uppercase tracking-wider mt-1">
+            {phase.name === 'unusable' ? 'Sign-in link' : 'Choose your password'}
+          </p>
         </div>
 
         <div className="bg-white border border-[#E6EAF2] rounded-3xl p-6 shadow-[0_20px_45px_-18px_rgba(15,23,42,0.12)]">
-          {checking ? (
+          {phase.name === 'checking' && (
             <div className="py-8 text-center">
               <div className="h-3 w-40 bg-[#F5F8FF] rounded mx-auto animate-pulse" />
               <p className="text-xs text-[#8A93A3] mt-3">Checking your link…</p>
             </div>
-          ) : !sessionOk ? (
-            <div className="py-4 text-center">
-              <h1 className="text-lg font-black text-[#0B1220]">This link has expired</h1>
-              <p className="text-sm text-[#5B6472] mt-2 leading-relaxed">
-                Invitation links can only be used once and last 24 hours. Ask your administrator to send a new one.
-              </p>
-              <a href="/admin/login" className="btn btn-outline text-xs font-bold py-2.5 px-5 mt-5 inline-flex">
-                Go to sign in
+          )}
+
+          {phase.name === 'unusable' && (
+            <div className="py-2">
+              <div className="w-11 h-11 rounded-full bg-[#FFF8E8] flex items-center justify-center mb-4">
+                <span className="text-xl">⏳</span>
+              </div>
+              <h1 className="text-lg font-black text-[#0B1220]">{phase.title}</h1>
+              <p className="text-sm text-[#5B6472] mt-2 leading-relaxed">{phase.detail}</p>
+              {phase.code && (
+                <p className="text-[11px] text-[#8A93A3] mt-2 font-mono">Reference: {phase.code}</p>
+              )}
+
+              <div className="border-t border-[#E6EAF2] mt-5 pt-5">
+                {retryDone ? (
+                  <div className="rounded-xl bg-[#EAFBF5] px-3.5 py-3 text-[12px] font-semibold text-[#0E9F76]">
+                    {retryMessage}
+                  </div>
+                ) : (
+                  <form onSubmit={requestNewLink} className="space-y-3">
+                    <label
+                      htmlFor="retry-email"
+                      className="block text-[11px] font-bold text-[#0B1220] uppercase tracking-wider"
+                    >
+                      Request a new link
+                    </label>
+                    <input
+                      id="retry-email"
+                      type="email"
+                      required
+                      autoComplete="email"
+                      value={retryEmail}
+                      placeholder="you@business.in"
+                      onChange={(e) => setRetryEmail(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E6EAF2] text-sm text-[#0B1220] placeholder-[#8A93A3] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+                    />
+                    {retryMessage && (
+                      <div className="rounded-xl bg-[#FFF1F5] px-3.5 py-2.5 text-[12px] font-semibold text-[#D62E6B]">
+                        {retryMessage}
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={retryBusy || !retryEmail.trim()}
+                      className="btn btn-primary w-full text-sm font-bold py-2.5 text-white shadow-btn disabled:opacity-50"
+                    >
+                      {retryBusy ? 'Sending…' : 'Email me a new link'}
+                    </button>
+                    <p className="text-[11px] text-[#8A93A3] leading-relaxed">
+                      Open the new link as soon as it arrives — each one works only once.
+                    </p>
+                  </form>
+                )}
+              </div>
+
+              <a
+                href="/admin/login"
+                className="block text-center text-xs font-bold text-[#2563EB] hover:underline mt-4"
+              >
+                Already know your password? Sign in
               </a>
             </div>
-          ) : done ? (
+          )}
+
+          {phase.name === 'done' && (
             <div className="py-4 text-center">
               <div className="w-12 h-12 rounded-full bg-[#EAFBF5] flex items-center justify-center mx-auto mb-3">
                 <span className="text-2xl">✓</span>
@@ -109,11 +263,13 @@ export default function SetPasswordPage() {
               <h1 className="text-lg font-black text-[#0B1220]">Password set</h1>
               <p className="text-sm text-[#5B6472] mt-1">Taking you to your dashboard…</p>
             </div>
-          ) : (
+          )}
+
+          {phase.name === 'ready' && (
             <form onSubmit={submit} className="space-y-4">
-              {email && (
+              {phase.email && (
                 <p className="text-xs text-[#5B6472]">
-                  Setting a password for <strong className="text-[#0B1220] break-all">{email}</strong>
+                  Setting a password for <strong className="text-[#0B1220] break-all">{phase.email}</strong>
                 </p>
               )}
 
@@ -154,9 +310,9 @@ export default function SetPasswordPage() {
                 />
               </div>
 
-              {error && (
+              {formError && (
                 <div className="rounded-xl bg-[#FFF1F5] px-3.5 py-2.5 text-[12px] font-semibold text-[#D62E6B]">
-                  {error}
+                  {formError}
                 </div>
               )}
 
