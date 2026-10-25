@@ -13,8 +13,17 @@ export function QrCodeGenerator({ client }: QrCodeGeneratorProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Determine feedback URL
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://autofocuss-reviews.vercel.app';
+  // The address baked into the printed QR code.
+  //
+  // NEXT_PUBLIC_APP_URL wins over the address of whatever page the admin
+  // happens to be on. A printed sticker cannot be changed, so generating one
+  // from a preview deployment or the raw .vercel.app host would tie that shop
+  // to the wrong domain permanently. The browser address stays as a fallback
+  // so nothing breaks if the variable is unset.
+  const rawOrigin =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    (typeof window !== 'undefined' ? window.location.origin : '');
+  const origin = rawOrigin.endsWith('/') ? rawOrigin.slice(0, -1) : rawOrigin;
   const feedbackUrl = `${origin}/f/${client.id}`;
 
   useEffect(() => {

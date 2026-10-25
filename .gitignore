@@ -9,3 +9,7 @@ node_modules/
 !.env.example
 
 npm-debug.log*
+
+# TypeScript incremental build cache — generated, not source
+tsconfig.tsbuildinfo
+*.tsbuildinfo
