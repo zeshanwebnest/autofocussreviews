@@ -1,4 +1,6 @@
 import { Metadata } from 'next';
+import { redirect } from 'next/navigation';
+import { getCurrentProfile } from '@/lib/auth';
 import { DataRepository } from '@/lib/data-repository';
 import { ClientManager } from '@/components/admin/ClientManager';
 import { SubmissionsTable } from '@/components/admin/SubmissionsTable';
@@ -15,6 +17,14 @@ export const metadata: Metadata = {
 export const revalidate = 0; // Fresh dynamic data
 
 export default async function AdminDashboardPage() {
+  // This page renders every shop's data using the service-role client, which
+  // bypasses row-level security. The middleware only proves someone is signed
+  // in, so the role has to be checked here too — without this, a shop owner
+  // could read the whole admin dashboard by visiting the URL.
+  const profile = await getCurrentProfile();
+  if (!profile || profile.disabled) redirect('/admin/login');
+  if (profile.role !== 'admin') redirect('/dashboard');
+
   const clients = await DataRepository.getAllClients();
   const submissions = await DataRepository.getAllSubmissions();
 
