@@ -3,6 +3,7 @@ import { DataRepository } from '@/lib/data-repository';
 import { ClientManager } from '@/components/admin/ClientManager';
 import { SubmissionsTable } from '@/components/admin/SubmissionsTable';
 import { SignOutButton } from '@/components/admin/SignOutButton';
+import { NotificationSettings } from '@/components/admin/NotificationSettings';
 
 export const metadata: Metadata = {
   title: 'Admin Dashboard | Autofocuss AI Review Capture',
@@ -96,7 +97,18 @@ export default async function AdminDashboardPage() {
           <ClientManager initialClients={clientsWithStats} />
         </section>
 
-        {/* Section 2: Submissions Stream */}
+        {/* Section 2: Alert recipients */}
+        <section className="pt-4">
+          <div className="mb-4">
+            <h2 className="text-2xl font-black text-[#0B1220] tracking-tight">Negative Review Alerts</h2>
+            <p className="text-xs sm:text-sm text-[#5B6472] mt-0.5">
+              Who gets emailed when a customer leaves a low rating. Changes apply to the next alert.
+            </p>
+          </div>
+          <NotificationSettings />
+        </section>
+
+        {/* Section 3: Submissions Stream */}
         <section className="pt-4">
           <div className="mb-4">
             <h2 className="text-2xl font-black text-[#0B1220] tracking-tight">Customer Feed & Phone List</h2>
