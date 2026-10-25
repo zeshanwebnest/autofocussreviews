@@ -105,8 +105,28 @@ export async function sendOwnerInvite(params: {
 
   if (error) return { ok: false, error: error.message };
 
-  const actionLink = data?.properties?.action_link;
-  if (!actionLink) return { ok: false, error: 'Supabase did not return an invitation link.' };
+  // Build our OWN link rather than using properties.action_link.
+  //
+  // That one points at Supabase's /verify endpoint, which has two problems
+  // here. It redirects back with the session in the URL fragment, which the
+  // PKCE-locked @supabase/ssr client rejects outright. And it spends the
+  // one-time token on any HTTP fetch at all — a link preview or mail scanner
+  // is enough — so the recipient finds it already used.
+  //
+  // A token_hash link points at this app instead. Fetching the page consumes
+  // nothing; the token is exchanged only when verifyOtp() runs in the browser.
+  const hashedToken = data?.properties?.hashed_token;
+  const verificationType = data?.properties?.verification_type || params.kind;
+  if (!hashedToken) {
+    return { ok: false, error: 'Supabase did not return a verification token.' };
+  }
+
+  // The token is never logged or returned to a caller — it only travels inside
+  // the email body below.
+  const actionLink =
+    `${appUrl()}/auth/set-password` +
+    `?token_hash=${encodeURIComponent(hashedToken)}` +
+    `&type=${encodeURIComponent(verificationType)}`;
 
   const { subject, html, text } = renderInviteEmail({
     kind: params.kind,

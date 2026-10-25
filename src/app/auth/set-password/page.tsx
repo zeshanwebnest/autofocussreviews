@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { readAuthCallback, type AuthCallback } from '@/lib/auth-callback';
@@ -14,9 +14,6 @@ import { readAuthCallback, type AuthCallback } from '@/lib/auth-callback';
  * cannot be used.
  */
 
-/** How long to wait for the client to turn a token fragment into a session. */
-const SESSION_TIMEOUT_MS = 8000;
-
 type Phase =
   | { name: 'checking' }
   | { name: 'ready'; email: string | null }
@@ -26,7 +23,6 @@ type Phase =
 export default function SetPasswordPage() {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ name: 'checking' });
-  const settled = useRef(false);
 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -40,78 +36,100 @@ export default function SetPasswordPage() {
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    let callback: AuthCallback = { kind: 'none' };
-    try {
-      callback = readAuthCallback(window.location.hash, window.location.search);
-    } catch {
-      callback = { kind: 'none' };
-    }
+    let cancelled = false;
 
-    const settle = (next: Phase) => {
-      if (settled.current) return;
-      settled.current = true;
-      setPhase(next);
+    const run = async () => {
+      let callback: AuthCallback;
+      try {
+        callback = readAuthCallback(window.location.hash, window.location.search);
+      } catch {
+        callback = { kind: 'none' };
+      }
+
+      if (callback.kind === 'error') {
+        if (!cancelled) {
+          setPhase({ name: 'unusable', title: callback.title, detail: callback.detail, code: callback.code });
+        }
+        return;
+      }
+
+      if (callback.kind === 'legacy') {
+        if (!cancelled) {
+          setPhase({
+            name: 'unusable',
+            title: 'This link is from an older email',
+            detail:
+              'Sign-in links changed recently, and this one can no longer be opened. ' +
+              'Request a new one below — it will work straight away.',
+            code: 'legacy_link',
+          });
+        }
+        return;
+      }
+
+      if (callback.kind === 'none') {
+        if (!cancelled) {
+          setPhase({
+            name: 'unusable',
+            title: 'Nothing to set up here',
+            detail:
+              'Open this page using the link from your email. If you typed the address ' +
+              'directly, request a new link below.',
+          });
+        }
+        return;
+      }
+
+      // Exchange the one-time token for a session. Until this succeeds there
+      // is no session, and the password form below is never rendered.
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase.auth.verifyOtp({
+          token_hash: callback.tokenHash,
+          type: callback.type,
+        });
+
+        if (cancelled) return;
+
+        if (error || !data?.session?.user) {
+          // Supabase reports an already-used link and an expired one alike.
+          const spent = /expired|invalid|not found/i.test(error?.message ?? '');
+          setPhase({
+            name: 'unusable',
+            title: spent ? 'This link can no longer be used' : 'This link could not be verified',
+            detail: spent
+              ? 'Sign-in links work only once and stop working after 24 hours. This one has ' +
+                'either already been opened or has passed its 24 hours.'
+              : 'The link could not be verified. Requesting a new one should fix it.',
+            // An error code only — never the token.
+            code: (error as { code?: string } | null)?.code || 'verification_failed',
+          });
+          return;
+        }
+
+        // Drop the token from the address bar so it does not linger in history.
+        try {
+          window.history.replaceState(window.history.state, '', window.location.pathname);
+        } catch {
+          /* non-fatal */
+        }
+
+        setPhase({ name: 'ready', email: data.session.user.email ?? null });
+      } catch {
+        if (!cancelled) {
+          setPhase({
+            name: 'unusable',
+            title: 'Could not reach the server',
+            detail: 'Check your connection and open the link again, or request a new one below.',
+            code: 'network_error',
+          });
+        }
+      }
     };
 
-    if (callback.kind === 'error') {
-      settle({ name: 'unusable', title: callback.title, detail: callback.detail, code: callback.code });
-      return;
-    }
-
-    let supabase: ReturnType<typeof createClient>;
-    try {
-      supabase = createClient();
-    } catch {
-      settle({
-        name: 'unusable',
-        title: 'Something went wrong',
-        detail: 'This page could not start up. Please reload and try again.',
-      });
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      settle(
-        callback.kind === 'tokens'
-          ? {
-              name: 'unusable',
-              title: 'This link could not be verified',
-              detail:
-                'The link looked valid but the sign-in did not complete. This is usually a temporary ' +
-                'connection problem — requesting a new link should fix it.',
-            }
-          : {
-              name: 'unusable',
-              title: 'Nothing to set up here',
-              detail:
-                'Open this page using the link from your email. If you typed the address directly, ' +
-                'request a new link below.',
-            }
-      );
-    }, SESSION_TIMEOUT_MS);
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        clearTimeout(timer);
-        settle({ name: 'ready', email: session.user.email ?? null });
-      }
-    });
-
-    supabase.auth
-      .getSession()
-      .then(({ data }) => {
-        if (data.session?.user) {
-          clearTimeout(timer);
-          settle({ name: 'ready', email: data.session.user.email ?? null });
-        }
-      })
-      .catch(() => {
-        // Leave it to the timeout rather than failing on a transient error.
-      });
-
+    void run();
     return () => {
-      clearTimeout(timer);
-      sub.subscription.unsubscribe();
+      cancelled = true;
     };
   }, []);
 

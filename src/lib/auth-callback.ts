@@ -1,17 +1,25 @@
 /**
- * Reads what Supabase put in the URL after an invitation or recovery link.
+ * Reads what arrives on the set-password page after an invitation or
+ * password-reset link.
  *
- * Supabase redirects to the callback page with either the session tokens or an
- * error, both in the URL fragment. The page previously only asked "did a
- * session appear?", so every failure — expired, already used, malformed, or a
- * network problem — showed the same "this link has expired" screen and the
- * real reason was discarded.
+ * Links are now application-owned: they point at this app carrying a
+ * `token_hash`, which the page exchanges for a session with verifyOtp(). The
+ * older style pointed at Supabase's /verify endpoint, which redirected back
+ * with the session in the URL fragment — those cannot be honoured, because
+ * @supabase/ssr forces the PKCE flow and auth-js rejects an implicit fragment
+ * outright (GoTrueClient _getSessionFromURL, "Not a valid PKCE flow url").
+ * They are detected so the page can say so plainly instead of timing out.
  *
  * Pure and framework-free so it can be tested directly against fixtures.
  */
 
+/** The verification types Supabase mints for these emails. */
+const ALLOWED_TYPES = ['recovery', 'invite', 'signup', 'magiclink', 'email', 'email_change'] as const;
+export type VerifyType = (typeof ALLOWED_TYPES)[number];
+
 export type AuthCallback =
-  | { kind: 'tokens' }
+  | { kind: 'verify'; tokenHash: string; type: VerifyType }
+  | { kind: 'legacy' }
   | { kind: 'none' }
   | {
       kind: 'error';
@@ -34,6 +42,10 @@ function paramsFrom(raw: string): URLSearchParams {
   }
 }
 
+function isAllowedType(value: string): value is VerifyType {
+  return (ALLOWED_TYPES as readonly string[]).includes(value);
+}
+
 /**
  * @param hash   window.location.hash
  * @param search window.location.search
@@ -41,7 +53,7 @@ function paramsFrom(raw: string): URLSearchParams {
 export function readAuthCallback(hash: string, search = ''): AuthCallback {
   const h = paramsFrom(hash);
   const q = paramsFrom(search);
-  const get = (key: string) => h.get(key) ?? q.get(key);
+  const get = (key: string) => q.get(key) ?? h.get(key);
 
   const error = get('error');
   const errorCode = get('error_code');
@@ -75,10 +87,26 @@ export function readAuthCallback(hash: string, search = ''): AuthCallback {
     };
   }
 
-  // An implicit-grant callback carries the session in the fragment. We only
-  // detect it here; the Supabase client is still what validates it.
+  // The current format: our own URL carrying a token to exchange.
+  const tokenHash = get('token_hash');
+  if (tokenHash) {
+    const rawType = (get('type') || 'recovery').toLowerCase();
+    if (!isAllowedType(rawType)) {
+      return {
+        kind: 'error',
+        code: 'unsupported_type',
+        title: 'That link did not work',
+        detail: 'The link is not a recognised sign-in link. Requesting a new one should fix it.',
+        canRetry: true,
+      };
+    }
+    return { kind: 'verify', tokenHash, type: rawType };
+  }
+
+  // An older Supabase-hosted link that redirected back with the session in the
+  // fragment. The configured client cannot accept these.
   if (get('access_token') || get('refresh_token') || get('code')) {
-    return { kind: 'tokens' };
+    return { kind: 'legacy' };
   }
 
   return { kind: 'none' };
