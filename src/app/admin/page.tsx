@@ -4,6 +4,8 @@ import { ClientManager } from '@/components/admin/ClientManager';
 import { SubmissionsTable } from '@/components/admin/SubmissionsTable';
 import { SignOutButton } from '@/components/admin/SignOutButton';
 import { NotificationSettings } from '@/components/admin/NotificationSettings';
+import { GoogleLinkManager } from '@/components/admin/GoogleLinkManager';
+import { OwnerAccounts } from '@/components/admin/OwnerAccounts';
 
 export const metadata: Metadata = {
   title: 'Admin Dashboard | Autofocuss AI Review Capture',
@@ -97,7 +99,31 @@ export default async function AdminDashboardPage() {
           <ClientManager initialClients={clientsWithStats} />
         </section>
 
-        {/* Section 2: Alert recipients */}
+        {/* Section 2: Google review links */}
+        <section className="pt-4">
+          <div className="mb-4">
+            <h2 className="text-2xl font-black text-[#0B1220] tracking-tight">Google Review Links</h2>
+            <p className="text-xs sm:text-sm text-[#5B6472] mt-0.5">
+              Where each shop&apos;s happy customers are sent. A link stays marked unverified until someone opens it and
+              confirms it is the right business.
+            </p>
+          </div>
+          <GoogleLinkManager />
+        </section>
+
+        {/* Section 3: Shop owner accounts */}
+        <section className="pt-4">
+          <div className="mb-4">
+            <h2 className="text-2xl font-black text-[#0B1220] tracking-tight">Shop Owner Accounts</h2>
+            <p className="text-xs sm:text-sm text-[#5B6472] mt-0.5">
+              Give a shop owner their own login. They see only their shop, and choose their own password from an emailed
+              link.
+            </p>
+          </div>
+          <OwnerAccounts />
+        </section>
+
+        {/* Section 4: Alert recipients */}
         <section className="pt-4">
           <div className="mb-4">
             <h2 className="text-2xl font-black text-[#0B1220] tracking-tight">Negative Review Alerts</h2>
@@ -108,7 +134,7 @@ export default async function AdminDashboardPage() {
           <NotificationSettings />
         </section>
 
-        {/* Section 3: Submissions Stream */}
+        {/* Section 5: Submissions Stream */}
         <section className="pt-4">
           <div className="mb-4">
             <h2 className="text-2xl font-black text-[#0B1220] tracking-tight">Customer Feed & Phone List</h2>

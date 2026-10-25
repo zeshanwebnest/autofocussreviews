@@ -16,6 +16,9 @@ export interface Database {
           logo_url: string | null
           brand_colour: string
           google_review_url: string
+          google_review_url_verified: boolean
+          google_review_url_updated_at: string | null
+          google_review_url_updated_by: string | null
           owner_whatsapp: string | null
           owner_email: string | null
           alert_threshold: number
@@ -30,6 +33,9 @@ export interface Database {
           logo_url?: string | null
           brand_colour?: string
           google_review_url: string
+          google_review_url_verified?: boolean
+          google_review_url_updated_at?: string | null
+          google_review_url_updated_by?: string | null
           owner_whatsapp?: string | null
           owner_email?: string | null
           alert_threshold?: number
@@ -44,6 +50,9 @@ export interface Database {
           logo_url?: string | null
           brand_colour?: string
           google_review_url?: string
+          google_review_url_verified?: boolean
+          google_review_url_updated_at?: string | null
+          google_review_url_updated_by?: string | null
           owner_whatsapp?: string | null
           owner_email?: string | null
           alert_threshold?: number
@@ -92,6 +101,9 @@ export interface Database {
           full_name: string | null
           role: string
           client_id: string | null
+          disabled: boolean
+          invited_at: string | null
+          last_invited_by: string | null
           created_at: string
           updated_at: string
         }
@@ -101,6 +113,9 @@ export interface Database {
           full_name?: string | null
           role?: string
           client_id?: string | null
+          disabled?: boolean
+          invited_at?: string | null
+          last_invited_by?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -110,6 +125,9 @@ export interface Database {
           full_name?: string | null
           role?: string
           client_id?: string | null
+          disabled?: boolean
+          invited_at?: string | null
+          last_invited_by?: string | null
           created_at?: string
           updated_at?: string
         }

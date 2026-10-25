@@ -6,8 +6,11 @@ export async function middleware(request: NextRequest) {
 
   const isAdminPage = pathname.startsWith('/admin') && pathname !== '/admin/login';
   const isAdminApi = pathname.startsWith('/api/admin');
+  // The owner dashboard needs the same signed-in check. Role is then enforced
+  // by the page itself and by every API route it calls.
+  const isDashboard = pathname.startsWith('/dashboard');
 
-  if (!isAdminPage && !isAdminApi) {
+  if (!isAdminPage && !isAdminApi && !isDashboard) {
     return NextResponse.next();
   }
 
@@ -54,5 +57,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/api/admin/:path*'],
+  matcher: ['/admin/:path*', '/api/admin/:path*', '/dashboard/:path*'],
 };

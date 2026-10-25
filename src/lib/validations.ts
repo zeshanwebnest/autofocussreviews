@@ -85,3 +85,63 @@ export function sanitizeComment(input?: string | null): string | null {
   const trimmed = input.trim();
   return trimmed.length > 0 ? trimmed.slice(0, 1000) : null;
 }
+
+/**
+ * Validates a Google review link.
+ *
+ * Accepts only the handful of hosts Google actually serves review links from.
+ * A wrong link here is expensive and invisible: every happy customer is sent
+ * to someone else's listing, and nobody notices for weeks.
+ */
+export function validateGoogleReviewUrl(input: string): ValidationResult<string> {
+  if (!input || typeof input !== 'string') {
+    return { isValid: false, error: 'A Google review link is required.' };
+  }
+
+  const trimmed = input.trim();
+
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return {
+      isValid: false,
+      error: 'That is not a complete web address. It should start with https://',
+    };
+  }
+
+  if (url.protocol !== 'https:') {
+    return { isValid: false, error: 'The link must start with https:// for security.' };
+  }
+
+  const host = url.hostname.toLowerCase();
+  const path = url.pathname.toLowerCase();
+
+  // Short links Google generates from the "Share" / "Ask for reviews" buttons.
+  const isShortLink =
+    host === 'g.page' || host === 'maps.app.goo.gl' || (host === 'goo.gl' && path.startsWith('/maps'));
+
+  // The long-form write-a-review URL.
+  const isWriteReview = host === 'search.google.com' && path.startsWith('/local/writereview');
+
+  // A plain Maps listing link.
+  const isMapsLink =
+    (host === 'www.google.com' || host === 'google.com' || host === 'maps.google.com') &&
+    path.startsWith('/maps');
+
+  if (!isShortLink && !isWriteReview && !isMapsLink) {
+    return {
+      isValid: false,
+      error:
+        `"${host}" is not a Google address. Use the link from your Google Business Profile — ` +
+        'it normally looks like https://g.page/r/..., https://maps.app.goo.gl/... or ' +
+        'https://search.google.com/local/writereview?placeid=...',
+    };
+  }
+
+  if (trimmed.length > 500) {
+    return { isValid: false, error: 'That link is unusually long — please check it.' };
+  }
+
+  return { isValid: true, value: trimmed };
+}

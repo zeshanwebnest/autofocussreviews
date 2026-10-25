@@ -11,6 +11,8 @@ export interface Profile {
   role: Role;
   /** null for central admins; the owner's single shop otherwise. */
   client_id: string | null;
+  /** Access revoked by an admin. The account and its history survive. */
+  disabled: boolean;
 }
 
 /**
@@ -33,7 +35,7 @@ export async function getCurrentProfile(): Promise<Profile | null> {
 
   const { data, error } = await admin
     .from('profiles')
-    .select('id, email, full_name, role, client_id')
+    .select('id, email, full_name, role, client_id, disabled')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -50,6 +52,7 @@ export async function getCurrentProfile(): Promise<Profile | null> {
 /** True when this profile may read or write records belonging to `clientId`. */
 export function canAccessClient(profile: Profile | null, clientId: string): boolean {
   if (!profile) return false;
+  if (profile.disabled) return false;
   if (profile.role === 'admin') return true;
   // An owner with no shop assigned deliberately matches nothing.
   if (!profile.client_id) return false;
@@ -96,6 +99,7 @@ function deny(message: string, status: number): { ok: false; response: NextRespo
 export async function guardUser(): Promise<Guard<Profile>> {
   const profile = await getCurrentProfile();
   if (!profile) return deny('Unauthorized', 401);
+  if (profile.disabled) return deny('Your access has been revoked. Contact your administrator.', 403);
   return { ok: true, profile };
 }
 
@@ -103,6 +107,7 @@ export async function guardUser(): Promise<Guard<Profile>> {
 export async function guardAdmin(): Promise<Guard<Profile>> {
   const profile = await getCurrentProfile();
   if (!profile) return deny('Unauthorized', 401);
+  if (profile.disabled) return deny('Your access has been revoked. Contact your administrator.', 403);
   if (profile.role !== 'admin') return deny('Forbidden — central administrators only.', 403);
   return { ok: true, profile };
 }
@@ -115,6 +120,7 @@ export async function guardAdmin(): Promise<Guard<Profile>> {
 export async function guardShop(clientId: string): Promise<Guard<Profile>> {
   const profile = await getCurrentProfile();
   if (!profile) return deny('Unauthorized', 401);
+  if (profile.disabled) return deny('Your access has been revoked. Contact your administrator.', 403);
   if (!canAccessClient(profile, clientId)) {
     return deny('Forbidden — you do not have access to that shop.', 403);
   }

@@ -22,14 +22,36 @@ export default function AdminLoginPage() {
       password,
     });
 
-    setIsSubmitting(false);
-
     if (signInError) {
+      setIsSubmitting(false);
       setError('Invalid email or password.');
       return;
     }
 
-    router.push('/admin');
+    // Send each role to the right place. The profile row is readable by its
+    // own user under the existing row-level policy.
+    let target = '/admin';
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      const { data: profile } = (await (supabase.from('profiles') as any)
+        .select('role, disabled')
+        .eq('id', user.id)
+        .maybeSingle()) as { data: { role: string; disabled: boolean } | null };
+
+      if (profile?.disabled) {
+        await supabase.auth.signOut();
+        setIsSubmitting(false);
+        setError('Your access has been revoked. Please contact your administrator.');
+        return;
+      }
+      if (profile?.role === 'owner') target = '/dashboard';
+    }
+
+    setIsSubmitting(false);
+    router.push(target);
     router.refresh();
   };
 
