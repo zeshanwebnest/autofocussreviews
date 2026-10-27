@@ -153,10 +153,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: invite.ok
-        ? `Invitation sent to ${email}.`
-        : `Account created, but the email failed: ${invite.error}. Use "Resend invite".`,
-      emailSent: invite.ok,
+      message: invite.accepted
+        ? `Account created. The setup link was accepted by the email provider for ${email} — ` +
+          'that is not proof of delivery, so ask them to check spam if it does not arrive.'
+        : `Account created, but the email provider rejected the request: ${invite.error ?? 'unknown error'}. ` +
+          'Use "Send setup link" to try again.',
+      emailAccepted: invite.accepted,
     });
   } catch (err: any) {
     console.error('[Admin Owners POST Error]', err);
@@ -164,7 +166,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** disable | enable | resend | reassign */
+/** disable | enable | send_setup | send_reset | reassign */
 export async function PATCH(req: NextRequest) {
   try {
     const guard = await guardAdmin();
@@ -202,18 +204,46 @@ export async function PATCH(req: NextRequest) {
       });
     }
 
-    if (action === 'resend') {
+    // 'resend' stays as an alias for the reset link so any older caller
+    // keeps working.
+    if (action === 'send_setup' || action === 'send_reset' || action === 'resend') {
+      // Both are minted as 'recovery'. Supabase refuses to re-issue an
+      // 'invite' link for an address that is already registered, and an
+      // owner's auth account exists from the moment they were first
+      // invited, so only the wording differs between the two actions.
+      const purpose: 'setup' | 'reset' = action === 'send_setup' ? 'setup' : 'reset';
       const client = prof.client_id ? await DataRepository.getClientById(prof.client_id) : null;
+
       const result = await sendOwnerInvite({
         email: prof.email as string,
         kind: 'recovery',
+        purpose,
         businessName: client?.business_name ?? 'your shop',
       });
-      if (!result.ok) {
-        return NextResponse.json({ success: false, error: result.error }, { status: 502 });
+
+      if (!result.accepted) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: result.error
+              ? `The email provider rejected the request: ${result.error}`
+              : 'The email provider rejected the request.',
+          },
+          { status: 502 }
+        );
       }
-      await profilesTable().update({ invited_at: new Date().toISOString(), last_invited_by: guard.profile.id }).eq('id', userId);
-      return NextResponse.json({ success: true, message: `Password link re-sent to ${prof.email}.` });
+
+      await profilesTable()
+        .update({ invited_at: new Date().toISOString(), last_invited_by: guard.profile.id })
+        .eq('id', userId);
+
+      // Accepted is not delivered, and the wording says so on purpose.
+      return NextResponse.json({
+        success: true,
+        message:
+          `${purpose === 'setup' ? 'Setup' : 'Password reset'} link accepted by the email provider for ` +
+          `${prof.email}. That is not proof of delivery — ask them to check spam if it does not arrive.`,
+      });
     }
 
     if (action === 'reassign') {

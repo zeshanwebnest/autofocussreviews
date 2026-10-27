@@ -182,8 +182,12 @@ export function OwnerAccounts() {
                       {o.full_name ? <span className="font-normal text-[#5B6472]"> · {o.full_name}</span> : null}
                     </p>
                     <p className="text-[11px] text-[#8A93A3]">
-                      Invited {when(o.invited_at)} · Last signed in {when(o.last_sign_in_at)}
-                      {!o.has_signed_in && ' · has not signed in yet'}
+                      Link last sent {when(o.invited_at)} · Last signed in {when(o.last_sign_in_at)}
+                    </p>
+                    <p className="text-[11px] text-[#8A93A3]">
+                      {o.has_signed_in
+                        ? 'Has signed in before, so a password is almost certainly set. Supabase does not expose this directly, so it is inferred from the sign-in.'
+                        : 'No sign-in recorded, so their password has probably not been set up yet.'}
                     </p>
                   </div>
                 ) : (
@@ -211,10 +215,20 @@ export function OwnerAccounts() {
                   <button
                     type="button"
                     disabled={busyId !== null}
-                    onClick={() => void patch(o.id, 'resend')}
+                    onClick={() => void patch(o.id, 'send_setup')}
                     className="btn btn-outline text-xs font-bold py-2 px-4 disabled:opacity-40"
+                    title="For an owner who has never signed in and needs to choose a password"
                   >
-                    {busyId === `resend-${o.id}` ? 'Sending…' : 'Resend password link'}
+                    {busyId === `send_setup-${o.id}` ? 'Sending…' : 'Send setup link'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyId !== null}
+                    onClick={() => void patch(o.id, 'send_reset')}
+                    className="btn btn-outline text-xs font-bold py-2 px-4 disabled:opacity-40"
+                    title="For an owner who already has a password and needs a new one"
+                  >
+                    {busyId === `send_reset-${o.id}` ? 'Sending…' : 'Send password reset link'}
                   </button>
                   <button
                     type="button"
@@ -236,6 +250,10 @@ export function OwnerAccounts() {
                   >
                     Remove
                   </button>
+                  <p className="basis-full text-[11px] text-[#8A93A3] mt-1">
+                    Setup link is for someone who has never signed in. Reset link is for someone who already
+                    has a password. Both work once and expire after 24 hours.
+                  </p>
                 </>
               ) : inviting ? (
                 <div className="w-full flex flex-col gap-2.5">

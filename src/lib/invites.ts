@@ -11,6 +11,16 @@ import { sendEmail } from '@/lib/email';
 
 export type InviteKind = 'invite' | 'recovery';
 
+/**
+ * Which wording the email uses. Deliberately separate from InviteKind:
+ * Supabase refuses to mint an 'invite' link once the address is registered
+ * ("A user with this email address has already been registered"), and an
+ * owner's auth account is created the moment they are first invited. So both
+ * a first-time setup link and a later reset link are minted as 'recovery';
+ * only the copy differs.
+ */
+export type InvitePurpose = 'setup' | 'reset';
+
 function appUrl(): string {
   const raw = process.env.NEXT_PUBLIC_APP_URL?.trim() || 'http://localhost:3000';
   return raw.endsWith('/') ? raw.slice(0, -1) : raw;
@@ -26,11 +36,11 @@ function escapeHtml(v: string): string {
 }
 
 function renderInviteEmail(params: {
-  kind: InviteKind;
+  purpose: InvitePurpose;
   businessName: string;
   actionLink: string;
 }): { subject: string; html: string; text: string } {
-  const isNew = params.kind === 'invite';
+  const isNew = params.purpose === 'setup';
   const subject = isNew
     ? `Your Autofocuss Reviews login for ${params.businessName}`
     : `Reset your Autofocuss Reviews password (${params.businessName})`;
@@ -93,9 +103,20 @@ export async function sendOwnerInvite(params: {
   email: string;
   kind: InviteKind;
   businessName: string;
-}): Promise<{ ok: boolean; error?: string; userId?: string }> {
+  /** Wording only. Defaults to 'setup' for an invite, 'reset' for a recovery. */
+  purpose?: InvitePurpose;
+}): Promise<{
+  ok: boolean;
+  /** True when the provider ACCEPTED the request. Not proof of delivery. */
+  accepted: boolean;
+  error?: string;
+  userId?: string;
+  providerId?: string;
+}> {
   const admin = createAdminClient();
-  if (!admin) return { ok: false, error: 'Supabase is not configured.' };
+  if (!admin) return { ok: false, accepted: false, error: 'Supabase is not configured.' };
+
+  const purpose: InvitePurpose = params.purpose ?? (params.kind === 'invite' ? 'setup' : 'reset');
 
   const { data, error } = await admin.auth.admin.generateLink({
     type: params.kind,
@@ -103,7 +124,7 @@ export async function sendOwnerInvite(params: {
     options: { redirectTo: `${appUrl()}/auth/set-password` },
   });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, accepted: false, error: error.message };
 
   // Build our OWN link rather than using properties.action_link.
   //
@@ -118,7 +139,7 @@ export async function sendOwnerInvite(params: {
   const hashedToken = data?.properties?.hashed_token;
   const verificationType = data?.properties?.verification_type || params.kind;
   if (!hashedToken) {
-    return { ok: false, error: 'Supabase did not return a verification token.' };
+    return { ok: false, accepted: false, error: 'Supabase did not return a verification token.' };
   }
 
   // The token is never logged or returned to a caller — it only travels inside
@@ -129,7 +150,7 @@ export async function sendOwnerInvite(params: {
     `&type=${encodeURIComponent(verificationType)}`;
 
   const { subject, html, text } = renderInviteEmail({
-    kind: params.kind,
+    purpose,
     businessName: params.businessName,
     actionLink,
   });
@@ -138,8 +159,14 @@ export async function sendOwnerInvite(params: {
   if (!sent.ok) {
     // The account may now exist even though the email failed; the admin can
     // resend from the owner-accounts screen.
-    return { ok: false, error: `Account prepared, but the email failed: ${sent.error}`, userId: data.user?.id };
+    return {
+      ok: false,
+      accepted: false,
+      error: sent.error,
+      userId: data.user?.id,
+    };
   }
 
-  return { ok: true, userId: data.user?.id };
+  // The provider accepted it. Delivery is a separate thing we cannot observe.
+  return { ok: true, accepted: true, userId: data.user?.id, providerId: sent.providerId };
 }
